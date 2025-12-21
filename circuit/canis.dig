@@ -84,12 +84,12 @@
       <elementName>RegisterFile</elementName>
       <elementAttributes>
         <entry>
-          <string>Label</string>
-          <string>Registers</string>
-        </entry>
-        <entry>
           <string>AddrBits</string>
           <int>5</int>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>Registers</string>
         </entry>
         <entry>
           <string>Bits</string>
@@ -102,12 +102,12 @@
       <elementName>Rectangle</elementName>
       <elementAttributes>
         <entry>
-          <string>Label</string>
-          <string>Decode</string>
-        </entry>
-        <entry>
           <string>RectHeight</string>
           <int>64</int>
+        </entry>
+        <entry>
+          <string>Label</string>
+          <string>Decode</string>
         </entry>
         <entry>
           <string>RectWidth</string>
@@ -481,6 +481,11 @@
         </entry>
       </elementAttributes>
       <pos x="1180" y="480"/>
+    </visualElement>
+    <visualElement>
+      <elementName>alu.dig</elementName>
+      <elementAttributes/>
+      <pos x="1780" y="140"/>
     </visualElement>
   </visualElements>
   <wires>
