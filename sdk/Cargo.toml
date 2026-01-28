@@ -1,0 +1,13 @@
+[package]
+name = "canis-sdk"
+description = "Assembles canis files (.can) to .hex files"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anstyle = "1.0.13"
+anyhow = "1.0.100"
+bitflags = "=2.10.0"
+clap = { version = "4.5.54", features = ["derive"] }
+convert-to-spaces = "0.1.1"
+inventory = "0.3.21"
