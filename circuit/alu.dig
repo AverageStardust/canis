@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <circuit>
   <version>2</version>
-  <attributes/>
+  <attributes>
+    <entry>
+      <string>romContent</string>
+      <romList>
+        <roms/>
+      </romList>
+    </entry>
+  </attributes>
   <visualElements>
     <visualElement>
       <elementName>Clock</elementName>
@@ -827,24 +834,6 @@
       <pos x="800" y="1140"/>
     </visualElement>
     <visualElement>
-      <elementName>Out</elementName>
-      <elementAttributes>
-        <entry>
-          <string>Label</string>
-          <string>cry</string>
-        </entry>
-        <entry>
-          <string>Bits</string>
-          <int>16</int>
-        </entry>
-        <entry>
-          <string>intFormat</string>
-          <intFormat>hex</intFormat>
-        </entry>
-      </elementAttributes>
-      <pos x="1540" y="20"/>
-    </visualElement>
-    <visualElement>
       <elementName>Const</elementName>
       <elementAttributes>
         <entry>
@@ -912,10 +901,6 @@
     </wire>
     <wire>
       <p1 x="1420" y="-20"/>
-      <p2 x="1460" y="-20"/>
-    </wire>
-    <wire>
-      <p1 x="1460" y="-20"/>
       <p2 x="1480" y="-20"/>
     </wire>
     <wire>
@@ -929,10 +914,6 @@
     <wire>
       <p1 x="1240" y="1300"/>
       <p2 x="1700" y="1300"/>
-    </wire>
-    <wire>
-      <p1 x="1460" y="20"/>
-      <p2 x="1540" y="20"/>
     </wire>
     <wire>
       <p1 x="1020" y="920"/>
@@ -1297,10 +1278,6 @@
     <wire>
       <p1 x="1200" y="920"/>
       <p2 x="1200" y="1340"/>
-    </wire>
-    <wire>
-      <p1 x="1460" y="-20"/>
-      <p2 x="1460" y="20"/>
     </wire>
     <wire>
       <p1 x="1140" y="60"/>
