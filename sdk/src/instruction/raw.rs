@@ -90,6 +90,10 @@ impl RawInstruction {
         Self::Large(instr)
     }
 
+    pub(super) fn break_type() -> Self {
+        Self::Small(0b1111111111111111)
+    }
+
     pub fn get_size(&self) -> usize {
         match self {
             Self::Small(_) => 1,
