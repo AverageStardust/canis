@@ -478,7 +478,7 @@ inventory::submit! {
 
 /// Generates a `in` instruction from the given register and immediate
 pub fn gen_in(rd: Register, imm: Immediate) -> RawInstruction {
-    RawInstruction::i_type(0.into(), Fun3::<000>, imm, rd, OpCode::<0b1111>)
+    RawInstruction::i_type(0.into(), Fun3::<0b000>, imm, rd, OpCode::<0b1111>)
 }
 
 fn instr_in(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
@@ -492,7 +492,7 @@ inventory::submit! {
 }
 /// Generates a `out` instruction from the given register and immediate
 pub fn gen_out(rs1: Register, imm: Immediate) -> RawInstruction {
-    RawInstruction::i_type(0.into(), Fun3::<000>, imm, rs1, OpCode::<0b1111>)
+    RawInstruction::i_type(0.into(), Fun3::<0b001>, imm, rs1, OpCode::<0b1111>)
 }
 
 fn instr_out(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
