@@ -3,24 +3,6 @@
  * Any changes will be lost if this file is regenerated.
  */
 
-module Mux_2x1
-(
-    input [0:0] sel,
-    input in_0,
-    input in_1,
-    output reg out
-);
-    always @ (*) begin
-        case (sel)
-            1'h0: out = in_0;
-            1'h1: out = in_1;
-            default:
-                out = 'h0;
-        endcase
-    end
-endmodule
-
-
 module DIG_Register
 (
     input C,
@@ -38,6 +20,90 @@ module DIG_Register
             state <= D;
    end
 endmodule
+
+module DIG_Counter_Nbit
+#(
+    parameter Bits = 2
+)
+(
+    output [(Bits-1):0] out,
+    output ovf,
+    input C,
+    input en,
+    input clr
+);
+    reg [(Bits-1):0] count;
+
+    always @ (posedge C) begin
+        if (clr)
+          count <= 'h0;
+        else if (en)
+          count <= count + 1'b1;
+    end
+
+    assign out = count;
+    assign ovf = en? &count : 1'b0;
+
+    initial begin
+        count = 'h0;
+    end
+endmodule
+
+
+module buttonFilter (
+  input C,
+  input btn,
+  output ris,
+  output fal
+);
+  wire s0;
+  wire s1;
+  wire s2;
+  wire s3;
+  assign s1 = (btn ^ s0);
+  DIG_Register DIG_Register_i0 (
+    .D( btn ),
+    .C( C ),
+    .en( s3 ),
+    .Q( s0 )
+  );
+  assign s2 = ~ s1;
+  DIG_Counter_Nbit #(
+    .Bits(16)
+  )
+  DIG_Counter_Nbit_i1 (
+    .en( s1 ),
+    .C( C ),
+    .clr( s2 ),
+    .ovf( s3 )
+  );
+  assign ris = (s3 & ~ s0);
+  assign fal = (s3 & s0);
+endmodule
+module DIG_D_FF_1bit
+#(
+    parameter Default = 0
+)
+(
+   input D,
+   input C,
+   output Q,
+   output \~Q
+);
+    reg state;
+
+    assign Q = state;
+    assign \~Q = ~state;
+
+    always @ (posedge C) begin
+        state <= D;
+    end
+
+    initial begin
+        state = Default;
+    end
+endmodule
+
 
 module DIG_Mul_signed #(
     parameter Bits = 1
@@ -972,12 +1038,12 @@ module DIG_ROM_8192X16_Program (
     input sel,
     output reg [15:0] D
 );
-    reg [15:0] my_rom [0:2];
+    reg [15:0] my_rom [0:7];
 
     always @ (*) begin
         if (~sel)
             D = 16'hz;
-        else if (A > 13'h2)
+        else if (A > 13'h7)
             D = 16'h0;
         else
             D = my_rom[A];
@@ -985,8 +1051,13 @@ module DIG_ROM_8192X16_Program (
 
     initial begin
         my_rom[0] = 16'h26;
-        my_rom[1] = 16'hbeef;
+        my_rom[1] = 16'hdead;
         my_rom[2] = 16'h440f;
+        my_rom[3] = 16'hffff;
+        my_rom[4] = 16'h26;
+        my_rom[5] = 16'hbeef;
+        my_rom[6] = 16'h440f;
+        my_rom[7] = 16'hffff;
     end
 endmodule
 
@@ -1174,30 +1245,6 @@ module DIG_ROM_16X1_ExtendedLUT (
     end
 endmodule
 
-module DIG_D_FF_1bit
-#(
-    parameter Default = 0
-)
-(
-   input D,
-   input C,
-   output Q,
-   output \~Q
-);
-    reg state;
-
-    assign Q = state;
-    assign \~Q = ~state;
-
-    always @ (posedge C) begin
-        state <= D;
-    end
-
-    initial begin
-        state = Default;
-    end
-endmodule
-
 
 module eTypeBuffer (
   input [15:0] I,
@@ -1266,11 +1313,13 @@ module DIG_ROM_32X22_OpcodeLUT (
     input sel,
     output reg [21:0] D
 );
-    reg [21:0] my_rom [0:31];
+    reg [21:0] my_rom [0:23];
 
     always @ (*) begin
         if (~sel)
             D = 22'hz;
+        else if (A > 5'h17)
+            D = 22'h0;
         else
             D = my_rom[A];
     end
@@ -1299,15 +1348,7 @@ module DIG_ROM_32X22_OpcodeLUT (
         my_rom[20] = 22'h0;
         my_rom[21] = 22'h0;
         my_rom[22] = 22'h0;
-        my_rom[23] = 22'h0;
-        my_rom[24] = 22'h0;
-        my_rom[25] = 22'h0;
-        my_rom[26] = 22'h0;
-        my_rom[27] = 22'h0;
-        my_rom[28] = 22'h0;
-        my_rom[29] = 22'h0;
-        my_rom[30] = 22'h0;
-        my_rom[31] = 22'h200000;
+        my_rom[23] = 22'h200000;
     end
 endmodule
 
@@ -1547,35 +1588,6 @@ module Demux3
 endmodule
 
 
-module DIG_Counter_Nbit
-#(
-    parameter Bits = 2
-)
-(
-    output [(Bits-1):0] out,
-    output ovf,
-    input C,
-    input en,
-    input clr
-);
-    reg [(Bits-1):0] count;
-
-    always @ (posedge C) begin
-        if (clr)
-          count <= 'h0;
-        else if (en)
-          count <= count + 1'b1;
-    end
-
-    assign out = count;
-    assign ovf = en? &count : 1'b0;
-
-    initial begin
-        count = 'h0;
-    end
-endmodule
-
-
 module Demux2
 #(
     parameter Default = 0 
@@ -1772,18 +1784,20 @@ module canis (
   wire [15:0] s47;
   wire s48;
   wire s49;
-  Mux_2x1 Mux_2x1_i0 (
-    .sel( PIN_13 ),
-    .in_0( s24 ),
-    .in_1( 1'b0 ),
-    .out( s48 )
-  );
-  // Hault
-  DIG_Register DIG_Register_i1 (
-    .D( s48 ),
+  wire s50;
+  buttonFilter buttonFilter_i0 (
     .C( CLK ),
-    .en( 1'b1 ),
-    .Q( s49 )
+    .btn( PIN_13 ),
+    .ris( s50 )
+  );
+  assign s49 = (~ s50 & (s48 | s24));
+  DIG_D_FF_1bit #(
+    .Default(0)
+  )
+  DIG_D_FF_1bit_i1 (
+    .D( s49 ),
+    .C( CLK ),
+    .Q( s48 )
   );
   assign s5 = ~ s49;
   alu alu_i2 (
