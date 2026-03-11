@@ -7,12 +7,12 @@ use crate::{
     assemble::{
         error::{
             Diagnostic,
-            annotations::{self, Annotatable},
+            annotations::{self, Annotatable, MultiUseWith},
         },
-        labels::LabelRegistry,
+        labels::{LabelRegistry, LabelRegistryResult},
         line_span::{Span, SpannedLine},
     },
-    instruction::types::{Immediate, Location, Register},
+    instruction::types::{Distance, Immediate, Location, Register},
 };
 
 pub(super) struct Parser<'a> {
@@ -52,9 +52,13 @@ impl<'a> Parser<'a> {
         parse_unsigned_immediate(imm_val, expected_bits)
     }
 
-    pub(super) fn require_label(&mut self) -> Result<Location, ParseError> {
+    pub(super) fn require_distance_to_label(
+        &mut self,
+        here: Location,
+        expected_bits: u8,
+    ) -> Result<Distance, ParseError> {
         let label_val = self.bump();
-        parse_label_location(label_val, self.label_registry)
+        parse_label_distance(label_val, self.label_registry, here, expected_bits)
     }
 
     // fn require(&mut self, types: ParserTypes) -> ParsedType {}
@@ -205,10 +209,12 @@ fn parse_and_restrict_unsigned(
         })
 }
 
-fn parse_label_location(
+fn parse_label_distance(
     label_val: SpannedLine<'_>,
     labels: &LabelRegistry<'_>,
-) -> Result<Location, ParseError> {
+    here: Location,
+    expected_bits: u8,
+) -> Result<Distance, ParseError> {
     if let Some(label_span) = label_val.collapse()
         && let mut chars = label_span.as_str().chars()
         && let Some(prefix) = chars.next()
@@ -223,9 +229,21 @@ fn parse_label_location(
                 span.end(),
             )))
         } else {
-            labels
-                .get_label_location(label_span.as_str())
-                .ok_or(ParseError::UnknownLabel(span.into()))
+            let location = labels.get_label(label_span.as_str());
+            match location {
+                LabelRegistryResult::Found((location, span)) => (location - here)
+                    .limit(expected_bits)
+                    .ok_or(ParseError::DistantLabel {
+                        span: annotations::CausalMultiLineSpan::new(
+                            span.into(),
+                            label_span.as_span().into(),
+                        ),
+                        distance: location - here,
+                        expected_bits,
+                    }),
+                LabelRegistryResult::Incomplete => Ok(Distance::new()),
+                LabelRegistryResult::NotFound => Err(ParseError::UnknownLabel(span.into())),
+            }
         }
     } else {
         let span = label_val.trim().as_span();
@@ -300,7 +318,11 @@ pub enum ParseError {
     /// A label was expected, but the found content could never be a label
     NotLabel(annotations::LineSpan),
     /// A label was both expected and found, but is too far from the actual label's location to jump
-    DistantLabel(annotations::CausalMultiLineSpan),
+    DistantLabel {
+        span: annotations::CausalMultiLineSpan,
+        distance: Distance,
+        expected_bits: u8,
+    },
 
     // Mixed values
     /// A mixed value was expected, but not content could be found
@@ -326,7 +348,7 @@ impl Diagnostic for ParseError {
             Self::MissingLabel(_) => 207,
             Self::UnknownLabel(_) => 208,
             Self::NotLabel(_) => 209,
-            Self::DistantLabel(_) => 210,
+            Self::DistantLabel { .. } => 210,
             Self::MissingValue(_, _) => 211,
             Self::NotValue(_, _) => 212,
             Self::ExcessContent(_) => 213,
@@ -345,7 +367,7 @@ impl Diagnostic for ParseError {
             Self::MissingLabel(_) => "missing label argument",
             Self::UnknownLabel(_) => "unknown label",
             Self::NotLabel(_) => "invalid label",
-            Self::DistantLabel(_) => "label too far",
+            Self::DistantLabel { .. } => "label too far",
             Self::MissingValue(_, _) => "missing argument",
             Self::NotValue(_, _) => "invalid argument",
             Self::ExcessContent(_) => "excess values found",
@@ -375,7 +397,7 @@ impl Diagnostic for ParseError {
                 source,
                 ["This is not a valid immediate value"],
                 Some(
-                    "Immediate values may be written with signed decimal,
+                    "Immediate values may be written with signed decimal, \
                         binary, octal, or hexadecimal.",
                 ),
             ),
@@ -383,7 +405,7 @@ impl Diagnostic for ParseError {
                 source,
                 ["This is not a valid unsigned immediate value"],
                 Some(
-                    "Unsigned immediate values may be written in decimal,
+                    "Unsigned immediate values may be written in decimal, \
                     binary, octal, or hexadecimal.",
                 ),
             ),
@@ -396,9 +418,48 @@ impl Diagnostic for ParseError {
                 Some("Some instructions can have larger immediates than others."),
             ),
 
+            Self::MissingLabel(span) => span.annotate(source, ["Expected a label here"], None),
+            Self::UnknownLabel(span) => span.annotate(
+                source,
+                [|unknown| format!("The label \"{unknown}\" does not exist")],
+                None,
+            ),
+            Self::NotLabel(span) => span.annotate(
+                source,
+                [|not_label| format!("Label \"{not_label}\" is not permitted")],
+                Some(
+                    "Labels must only contain ascii \
+                alphanumeric characters, and underscores, \
+                and may not begin with numbers.",
+                ),
+            ),
+            Self::DistantLabel {
+                span,
+                distance,
+                expected_bits,
+            } => span.annotate(
+                source,
+                [
+                    MultiUseWith::A(|label| format!("Label \"{label}\" defined here")),
+                    MultiUseWith::B(|_| {
+                        let max_jump = if distance.is_negative() {
+                            -(1 << (expected_bits - 1))
+                        } else {
+                            (1 << (expected_bits - 1)) - 1
+                        };
+                        format!(
+                            "Jumping from here is a distance of {distance}, \
+                        but only jumps of up to {max_jump} are allowed"
+                        )
+                    }),
+                ],
+                Some("Some instructions can have larger immediates than others."),
+            ),
+
             Self::ExcessContent(span) => {
                 span.annotate(source, ["Unexpected values found here"], None)
             }
+            // TODO: More of these errors
             _ => None,
         }
     }

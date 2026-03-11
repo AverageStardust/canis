@@ -48,6 +48,35 @@ impl RawInstruction {
         Self::Small(instr)
     }
 
+    pub(super) fn l_type(
+        rs1: Register,
+        imm: Immediate,
+        rd: Register,
+        op: impl ValidOpCode,
+    ) -> Self {
+        let mut instr = *op & 0b0000000000001111;
+        instr |= (*rd << 4) & 0b0000000001110000;
+        instr |= (*imm << 7) & 0b0001111110000000;
+        instr |= (*rs1 << 13) & 0b1110000000000000;
+        Self::Small(instr)
+    }
+
+    pub(super) fn s_type(
+        rs1: Register,
+        rs2: Register,
+        imm: Immediate,
+        op: impl ValidOpCode,
+    ) -> Self {
+        let upper = (*imm & 0b111000) >> 3;
+        let lower = *imm & 0b000111;
+        let mut instr = *op & 0b0000000000001111;
+        instr |= (lower << 4) & 0b0000000001110000;
+        instr |= (*rs2 << 7) & 0b0000001110000000;
+        instr |= (upper << 10) & 0b0001110000000000;
+        instr |= (*rs1 << 13) & 0b1110000000000000;
+        Self::Small(instr)
+    }
+
     pub(super) fn e_type(
         imm: Immediate,
         rs1: Register,

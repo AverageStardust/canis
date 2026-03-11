@@ -1,4 +1,7 @@
-use std::ops::{Add, AddAssign, Deref, Sub};
+use std::{
+    fmt::Display,
+    ops::{Add, AddAssign, Deref, Sub},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Location(usize);
@@ -29,7 +32,32 @@ impl Sub<Location> for Location {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Distance(isize);
+
+impl Distance {
+    pub fn new() -> Self {
+        Self(0)
+    }
+    pub fn is_negative(&self) -> bool {
+        return self.0 < 0;
+    }
+    pub fn limit(self, expected_bits: u8) -> Option<Self> {
+        let max = (0b1isize << (expected_bits - 1)) - 1;
+        let min = !max;
+        if self.0 > max as isize || self.0 < min as isize {
+            None
+        } else {
+            Some(self)
+        }
+    }
+}
+
+impl Display for Distance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct Register(u16);
@@ -79,6 +107,12 @@ impl PartialOrd<u16> for Immediate {
 impl From<u16> for Immediate {
     fn from(value: u16) -> Self {
         Immediate(value)
+    }
+}
+
+impl From<Distance> for Immediate {
+    fn from(value: Distance) -> Self {
+        Self(value.0 as u16)
     }
 }
 

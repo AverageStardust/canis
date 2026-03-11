@@ -4,7 +4,7 @@ use crate::instruction::{
     parser::{Parser, ParserTypes},
     raw::RawInstruction,
     registry::InstructionParserResult,
-    types::{Fun3, Immediate, Location, OpCode, Register},
+    types::{Distance, Fun3, Immediate, Location, OpCode, Register},
 };
 
 /// Generates an `or` instruction from the given registers
@@ -348,6 +348,67 @@ inventory::submit! {
     Instruction::new("lie", instr_lie)
 }
 
+/// Generates an `lm` instruction from the given registers and immediate
+pub fn gen_lm(dest: Register, addr: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::l_type(addr, imm, dest, OpCode::<0b0111>)
+}
+
+fn instr_lm(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::mem_instr(parser, gen_lm)
+}
+
+inventory::submit! {
+    Instruction::new_with_explain(
+        "lm",
+        instr_lm,
+        "Store Memory",
+        "rd = M[rs1 + imm]",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Loads the value stored in memory at the address of rs1 + imm into rs2.")
+            .arg("rd", ParserTypes::Register)
+            .arg("rs1", ParserTypes::Register)
+            .arg("imm", ParserTypes::Immediate.with_expected_bits(6))
+        )
+    )
+}
+
+/// Generates an `sm` instruction from the given registers and immediate
+pub fn gen_sm(source: Register, addr: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::s_type(addr, source, imm, OpCode::<0b1000>)
+}
+
+fn instr_sm(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::mem_instr(parser, gen_sm)
+}
+
+inventory::submit! {
+    Instruction::new_with_explain(
+        "sm",
+        instr_sm,
+        "Store Memory",
+        "M[rs1 + imm] = rs2",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Stores the value stored in rs2 at the address of rs1 + imm in memory.")
+            .arg("rs2", ParserTypes::Register)
+            .arg("rs1", ParserTypes::Register)
+            .arg("imm", ParserTypes::Immediate.with_expected_bits(6))
+        )
+    )
+}
+
+/// Generates a `beqz` instruction from the given registers and immediate
+pub fn gen_beqz(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b001>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_beqz(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_beqz)
+}
+
+inventory::submit! {
+    Instruction::new("beqz", instr_beqz)
+}
+
 mod helpers {
     use super::*;
 
@@ -381,6 +442,31 @@ mod helpers {
         let rd = parser.require_register()?;
         let imm = parser.require_immediate(9)?;
         Ok(generator(rd, imm).into())
+    }
+
+    #[inline(always)]
+    pub(super) fn btype_instr<F>(
+        pc: Location,
+        parser: &mut Parser,
+        generator: F,
+    ) -> InstructionParserResult
+    where
+        F: Fn(Register, Distance) -> RawInstruction,
+    {
+        let rd = parser.require_register()?;
+        let distance = parser.require_distance_to_label(pc, 6)?;
+        Ok(generator(rd, distance).into())
+    }
+
+    #[inline(always)]
+    pub(super) fn mem_instr<F>(parser: &mut Parser, generator: F) -> InstructionParserResult
+    where
+        F: Fn(Register, Register, Immediate) -> RawInstruction,
+    {
+        let source_or_dest_reg = parser.require_register()?;
+        let address_reg = parser.require_register()?;
+        let addr_offset = parser.require_immediate(6)?;
+        Ok(generator(source_or_dest_reg, address_reg, addr_offset).into())
     }
 }
 

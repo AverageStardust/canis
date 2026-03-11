@@ -306,7 +306,7 @@ impl Diagnostic for LabelPassError {
                 source,
                 ["A label is expected here"],
                 Some(
-                    "The character ':' is specifically used to suffix labels.
+                    "The character ':' is specifically used to suffix labels. \
                     If it is present, a label will be expected on that line.",
                 ),
             ),
@@ -340,7 +340,7 @@ impl Diagnostic for LabelPassError {
                     format!("Tried to add label \"{label}\" without an associated instruction")
                 }],
                 Some(
-                    "Labels must be followed by an instruction, either
+                    "Labels must be followed by an instruction, either \
                 on the same line, or on a following line.",
                 ),
             ),
