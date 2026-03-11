@@ -409,6 +409,71 @@ inventory::submit! {
     Instruction::new("beqz", instr_beqz)
 }
 
+/// Generates a `bnez` instruction from the given registers and immediate
+pub fn gen_bnez(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b010>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_bnez(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_bnez)
+}
+
+inventory::submit! {
+    Instruction::new("bnez", instr_bnez)
+}
+
+/// Generates a `bgtz` instruction from the given registers and immediate
+pub fn gen_bgtz(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b011>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_bgtz(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_bgtz)
+}
+
+inventory::submit! {
+    Instruction::new("bgtz", instr_bgtz)
+}
+
+/// Generates a `blez` instruction from the given registers and immediate
+pub fn gen_blez(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b100>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_blez(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_blez)
+}
+
+inventory::submit! {
+    Instruction::new("blez", instr_blez)
+}
+
+/// Generates a `bltz` instruction from the given registers and immediate
+pub fn gen_bltz(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b101>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_bltz(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_bltz)
+}
+
+inventory::submit! {
+    Instruction::new("bltz", instr_bltz)
+}
+
+/// Generates a `bgez` instruction from the given registers and immediate
+pub fn gen_bgez(source: Register, distance: Distance) -> RawInstruction {
+    RawInstruction::b_type(source, Fun3::<0b110>, distance.into(), OpCode::<0b1001>)
+}
+
+fn instr_bgez(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::btype_instr(pc, parser, gen_bgez)
+}
+
+inventory::submit! {
+    Instruction::new("bgez", instr_bgez)
+}
+
 mod helpers {
     use super::*;
 
