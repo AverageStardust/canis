@@ -1000,7 +1000,7 @@ module DIG_ROM_8192X16_Data (
     always @ (*) begin
         if (~sel)
             D = 16'hz;
-        else if (A > 13'hffff)
+        else if (A > 13'hffffffffffffffff)
             D = 16'h0;
         else
             D = my_rom[A];
@@ -1010,34 +1010,28 @@ module DIG_ROM_8192X16_Data (
     end
 endmodule
 
-module DIG_RAMDualAccess
+module DIG_RAMDualPort
 #(
     parameter Bits = 8,
     parameter AddrBits = 4
 )
 (
-    input C, // Clock signal
-    input ld,
-    input [(AddrBits-1):0] \1A ,
-    input [(AddrBits-1):0] \2A ,
-    input [(Bits-1):0] \1Din ,
-    input str,
-    output [(Bits-1):0] \1D ,
-    output [(Bits-1):0] \2D
+  input [(AddrBits-1):0] A,
+  input [(Bits-1):0] Din,
+  input str,
+  input C,
+  input ld,
+  output [(Bits-1):0] D
 );
-    // CAUTION: uses distributed RAM
-    reg [(Bits-1):0] memory [0:((1 << AddrBits)-1)];
+  reg [(Bits-1):0] memory[0:((1 << AddrBits) - 1)];
 
-    assign \1D = ld? memory[\1A ] : 'hz;
-    assign \2D = memory[\2A ];
+  assign D = ld? memory[A] : 'hz;
 
-    always @ (posedge C) begin
-        if (str)
-            memory[\1A ] <= \1Din ;
-    end
-
+  always @ (posedge C) begin
+    if (str)
+      memory[A] <= Din;
+  end
 endmodule
-
 
 
 module addressSpace (
@@ -1049,64 +1043,50 @@ module addressSpace (
   output [15:0] I,
   output [15:0] D
 );
-  wire s0;
+  wire [12:0] s0;
   wire [12:0] s1;
-  wire [12:0] s2;
-  wire [15:0] s3;
-  wire [15:0] s4;
-  wire [15:0] s5;
-  wire [15:0] s6;
+  wire [15:0] s2;
   wire Data_High;
+  wire s3;
+  wire [15:0] s4;
   wire Inst_High;
   assign s1 = Da[12:0];
   assign Data_High = Da[13];
-  assign s2 = Ia[12:0];
+  assign s0 = Ia[12:0];
   assign Inst_High = Ia[13];
   // Program
   DIG_ROM_8192X16_Program DIG_ROM_8192X16_Program_i0 (
-    .A( s2 ),
+    .A( s0 ),
     .sel( 1'b1 ),
-    .D( s5 )
+    .D( I )
   );
   // Data
   DIG_ROM_8192X16_Data DIG_ROM_8192X16_Data_i1 (
     .A( s1 ),
     .sel( 1'b1 ),
-    .D( s6 )
+    .D( s2 )
   );
-  assign s0 = (str & Data_High);
-  // RAM
-  DIG_RAMDualAccess #(
+  assign s3 = (str & Data_High);
+  DIG_RAMDualPort #(
     .Bits(16),
     .AddrBits(13)
   )
-  DIG_RAMDualAccess_i2 (
-    .str( s0 ),
+  DIG_RAMDualPort_i2 (
+    .A( s1 ),
+    .Din( Din ),
+    .str( s3 ),
     .C( C ),
     .ld( 1'b1 ),
-    .\1A ( s1 ),
-    .\1Din ( Din ),
-    .\2A ( s2 ),
-    .\1D ( s3 ),
-    .\2D ( s4 )
+    .D( s4 )
   );
   Mux_2x1_NBits #(
     .Bits(16)
   )
   Mux_2x1_NBits_i3 (
     .sel( Data_High ),
-    .in_0( s6 ),
-    .in_1( s3 ),
-    .out( D )
-  );
-  Mux_2x1_NBits #(
-    .Bits(16)
-  )
-  Mux_2x1_NBits_i4 (
-    .sel( Inst_High ),
-    .in_0( s5 ),
+    .in_0( s2 ),
     .in_1( s4 ),
-    .out( I )
+    .out( D )
   );
 endmodule
 
