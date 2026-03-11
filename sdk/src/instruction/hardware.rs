@@ -396,7 +396,7 @@ inventory::submit! {
     )
 }
 
-/// Generates a `beqz` instruction from the given registers and immediate
+/// Generates a `beqz` instruction from the given register and distance
 pub fn gen_beqz(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b001>, distance.into(), OpCode::<0b1001>)
 }
@@ -409,7 +409,7 @@ inventory::submit! {
     Instruction::new("beqz", instr_beqz)
 }
 
-/// Generates a `bnez` instruction from the given registers and immediate
+/// Generates a `bnez` instruction from the given register and distance
 pub fn gen_bnez(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b010>, distance.into(), OpCode::<0b1001>)
 }
@@ -422,7 +422,7 @@ inventory::submit! {
     Instruction::new("bnez", instr_bnez)
 }
 
-/// Generates a `bgtz` instruction from the given registers and immediate
+/// Generates a `bgtz` instruction from the given register and distance
 pub fn gen_bgtz(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b011>, distance.into(), OpCode::<0b1001>)
 }
@@ -435,7 +435,7 @@ inventory::submit! {
     Instruction::new("bgtz", instr_bgtz)
 }
 
-/// Generates a `blez` instruction from the given registers and immediate
+/// Generates a `blez` instruction from the given register and distance
 pub fn gen_blez(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b100>, distance.into(), OpCode::<0b1001>)
 }
@@ -448,7 +448,7 @@ inventory::submit! {
     Instruction::new("blez", instr_blez)
 }
 
-/// Generates a `bltz` instruction from the given registers and immediate
+/// Generates a `bltz` instruction from the given register and distance
 pub fn gen_bltz(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b101>, distance.into(), OpCode::<0b1001>)
 }
@@ -461,7 +461,7 @@ inventory::submit! {
     Instruction::new("bltz", instr_bltz)
 }
 
-/// Generates a `bgez` instruction from the given registers and immediate
+/// Generates a `bgez` instruction from the given register and distance
 pub fn gen_bgez(source: Register, distance: Distance) -> RawInstruction {
     RawInstruction::b_type(source, Fun3::<0b110>, distance.into(), OpCode::<0b1001>)
 }
@@ -472,6 +472,37 @@ fn instr_bgez(pc: Location, parser: &mut Parser) -> InstructionParserResult {
 
 inventory::submit! {
     Instruction::new("bgez", instr_bgez)
+}
+
+// TODO: Implement alts & Jumps
+
+/// Generates a `in` instruction from the given register and immediate
+pub fn gen_in(rd: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(0.into(), Fun3::<000>, imm, rd, OpCode::<0b1111>)
+}
+
+fn instr_in(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let rd = parser.require_register()?;
+    let imm = parser.require_immediate(3)?;
+    Ok(gen_in(rd, imm).into())
+}
+
+inventory::submit! {
+    Instruction::new("in", instr_in)
+}
+/// Generates a `out` instruction from the given register and immediate
+pub fn gen_out(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(0.into(), Fun3::<000>, imm, rs1, OpCode::<0b1111>)
+}
+
+fn instr_out(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let rsr1 = parser.require_register()?;
+    let imm = parser.require_immediate(3)?;
+    Ok(gen_out(rsr1, imm).into())
+}
+
+inventory::submit! {
+    Instruction::new("out", instr_out)
 }
 
 mod helpers {
