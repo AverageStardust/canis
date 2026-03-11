@@ -1,3 +1,3 @@
-mod assemble;
+pub(crate) mod assemble;
 
 pub use assemble::assemble;

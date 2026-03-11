@@ -1,42 +1,51 @@
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt::Display,
-    io::Write,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use convert_to_spaces::convert_to_spaces;
 
 use crate::{
     CommandError,
-    log::Log,
-    processes::assemble::{
-        diagnostics::{Annotatable, Annotation, MultiUseWith},
-        error::Diagnostic,
-        instruction::InstructionParserRegistry,
+    assemble::{
+        error::{
+            self, Diagnostic,
+            annotations::{self, Annotatable, Annotation, MultiUseWith},
+        },
+        labels::LabelRegistry,
         line_span::{Span, SpannableIter},
     },
+    instruction::{
+        parser::ParseError, raw::RawInstruction, registry::InstructionParserRegistry,
+        types::Location,
+    },
+    log::Log,
 };
-
-mod diagnostics;
-mod instruction;
-mod line_span;
 
 pub fn assemble(
     log: &mut Log,
     input: &str,
     input_name: impl Display,
-    mut output: impl Write,
+    output: &mut impl std::io::Write,
 ) -> Result<(), CommandError> {
     let input = convert_to_spaces(input, 4);
     let instructions = InstructionParserRegistry::initialize()?;
     let labels = handle_pass_error(
         log,
         &input,
-        input_name,
+        &input_name,
         "initial",
         label_pass(&input, &instructions),
     )?;
+    let instructions = handle_pass_error(
+        log,
+        &input,
+        &input_name,
+        "assembly",
+        instr_pass(&input, &instructions, labels),
+    )?;
+    write_output(output, instructions)?;
     Ok(())
 }
 
@@ -65,16 +74,54 @@ where
     }
 }
 
+fn write_output(
+    output: &mut impl std::io::Write,
+    instructions: Vec<RawInstruction>,
+) -> Result<(), CommandError> {
+    writeln!(output, "v2.0 raw").context("output writing failed while writing header")?;
+    let mut word = 0;
+    for (idx, instr) in instructions.iter().enumerate() {
+        match instr {
+            RawInstruction::Small(val) => {
+                writeln!(output, "{val:x}").with_context(|| {
+                    format!(
+                        "output writing failed while writing instruction {idx} as word {}",
+                        word
+                    )
+                })?;
+                word += 1;
+            }
+            RawInstruction::Large(val) => {
+                writeln!(output, "{:x}", *val as u16).with_context(|| {
+                    format!(
+                        "output writing failed while writing instruction {idx} as word {}",
+                        word
+                    )
+                })?;
+                word += 1;
+                writeln!(output, "{:x}", (val >> 16) as u16).with_context(|| {
+                    format!(
+                        "output writing failed while writing instruction {idx} as word {}",
+                        word
+                    )
+                })?;
+                word += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn label_pass<'a>(
     input: &'a str,
     instructions: &InstructionParserRegistry,
-) -> Result<HashMap<&'a str, (usize, Span)>, Vec<LabelPassError>> {
+) -> Result<HashMap<&'a str, (Location, Span)>, Vec<LabelPassError>> {
     let mut labels = HashMap::new();
-    let mut pc: usize = 0;
+    let mut pc = Location::new();
     let mut pc_poisoned = false;
     let mut errors: Vec<LabelPassError> = Vec::new();
 
-    let mut last_instr: Option<usize> = None;
+    let mut last_instr: Option<Location> = None;
     for line in input.lines().spanned() {
         // Ignore everything past comment
         let line = if let Some((pre_comment, _comment)) = line.split_once('#') {
@@ -92,7 +139,7 @@ fn label_pass<'a>(
                 if !prefix.is_ascii_alphabetic() && prefix != '_' {
                     let span = label.as_span();
                     errors.push(LabelPassError::InvalidLabelPrefix(
-                        diagnostics::LineChar::new(span.line(), span.start()),
+                        annotations::LineChar::new(span.line(), span.start()),
                     ));
                 } else if chars.any(|ch| !ch.is_ascii_alphanumeric() && ch != '_') {
                     let span = label.as_span();
@@ -106,7 +153,7 @@ fn label_pass<'a>(
                             let (_, cause) = occupied.remove();
                             let span = label.as_span();
                             errors.push(LabelPassError::DuplicateLabel(
-                                diagnostics::CausalMultiLineSpan::new(cause.into(), span.into()),
+                                annotations::CausalMultiLineSpan::new(cause.into(), span.into()),
                             ));
                         }
                     }
@@ -149,7 +196,7 @@ fn label_pass<'a>(
 
         for (_pc, span) in missing_instruction {
             errors.push(LabelPassError::MissingAssociatedInstruction(
-                diagnostics::LineSpan::new(span.line(), span.start(), span.end()),
+                annotations::LineSpan::new(span.line(), span.start(), span.end()),
             ));
         }
     }
@@ -161,38 +208,73 @@ fn label_pass<'a>(
     }
 }
 
-#[derive(Debug)]
-enum LabelPassError {
-    MissingLabel(diagnostics::LineOnly),
-    InvalidLabelPrefix(diagnostics::LineChar),
-    InvalidLabel(diagnostics::LineSpan),
-    DuplicateLabel(diagnostics::CausalMultiLineSpan),
-    MissingAssociatedInstruction(diagnostics::LineSpan),
+fn instr_pass<'a>(
+    input: &'a str,
+    instructions: &InstructionParserRegistry,
+    labels: HashMap<&'a str, (Location, Span)>,
+) -> Result<Vec<RawInstruction>, Vec<InstrPassError>> {
+    let registry = LabelRegistry::Complete(labels);
+    let mut pc = Location::new();
+    // PC poisoning can safely be ignored here. If an error occurs, no writes will be made anywhere.
+    let mut errors: Vec<InstrPassError> = Vec::new();
 
-    ParseError(instruction::ParseError),
+    let mut output = Vec::new();
+
+    for line in input.lines().spanned() {
+        // Ignore everything past comment
+        let line = if let Some((pre_comment, _comment)) = line.split_once('#') {
+            pre_comment
+        } else {
+            line
+        };
+
+        // Try to pull out a label if there is one, and an instruction if there is one
+        // Since label problems are handled in the label pass, this can safely be assumed to be correct
+        let maybe_instr = if let Some((_label, remainder)) = line.split_once(':') {
+            remainder
+        } else {
+            line
+        };
+
+        match instructions.parse_instruction(&registry, pc, maybe_instr) {
+            Ok(instr_vec) => {
+                let size = instr_vec.get_size();
+                if size > 0 {
+                    pc += instr_vec.get_size();
+                }
+                instr_vec.into_iter().for_each(|instr| output.push(instr));
+            }
+            Err(err) => errors.push(err.into()),
+        }
+    }
+
+    // Labels missing instructions are handled above, they are can safely be assumed as handled here
+
+    if errors.len() > 0 {
+        Err(errors)
+    } else {
+        Ok(output)
+    }
 }
 
-impl From<instruction::ParseError> for LabelPassError {
-    fn from(value: instruction::ParseError) -> Self {
+#[derive(Debug)]
+enum LabelPassError {
+    MissingLabel(annotations::LineOnly),
+    InvalidLabelPrefix(annotations::LineChar),
+    InvalidLabel(annotations::LineSpan),
+    DuplicateLabel(annotations::CausalMultiLineSpan),
+    MissingAssociatedInstruction(annotations::LineSpan),
+
+    ParseError(ParseError),
+}
+
+impl From<ParseError> for LabelPassError {
+    fn from(value: ParseError) -> Self {
         Self::ParseError(value)
     }
 }
 
-enum LabelRegistry<'a> {
-    Incomplete,
-    Complete(HashMap<&'a str, (usize, Span)>),
-}
-
-impl<'a> LabelRegistry<'a> {
-    fn get_label_location(&self, label: &'a str) -> Option<usize> {
-        match self {
-            Self::Incomplete => Some(0),
-            Self::Complete(registry) => registry.get(label).map(|(loc, _)| *loc),
-        }
-    }
-}
-
-impl error::Diagnostic for LabelPassError {
+impl Diagnostic for LabelPassError {
     fn code(&self) -> usize {
         match self {
             Self::MissingLabel(_) => 100,
@@ -268,141 +350,33 @@ impl error::Diagnostic for LabelPassError {
     }
 }
 
-mod error {
-    use std::{fmt::Write, usize};
+#[derive(Debug)]
+enum InstrPassError {
+    ParseError(ParseError),
+}
 
-    use crate::processes::assemble::diagnostics::{
-        AnnotatedLine, AnnotatedSegment, AnnotationFormat,
-    };
-
-    use super::*;
-    use anstyle::{Ansi256Color, AnsiColor, Color, Reset, Style};
-
-    pub trait Diagnostic {
-        fn code(&self) -> usize;
-        fn overview(&self) -> String;
-        fn annotation(&self, source: &str) -> Option<Annotation>;
+impl From<ParseError> for InstrPassError {
+    fn from(value: ParseError) -> Self {
+        Self::ParseError(value)
     }
+}
 
-    static RESET: Reset = Reset;
-    static CONTEXT: Style = Style::new().fg_color(Some(Color::Ansi256(Ansi256Color(103))));
-    static SOURCE: Style = Style::new()
-        .fg_color(Some(Color::Ansi256(Ansi256Color(146))))
-        .bold();
-    static COMMENT: Style = Style::new().fg_color(Some(Color::Ansi256(Ansi256Color(103))));
-    static BOLD: Style = Style::new().bold();
-    static ERROR: Style = Style::new()
-        .fg_color(Some(Color::Ansi(AnsiColor::Red)))
-        .bold();
-    static HIGHLIGHT: Style = Style::new()
-        .fg_color(Some(Color::Ansi(AnsiColor::BrightBlue)))
-        .bold();
-
-    pub fn print_error<D>(input: &str, input_name: impl Display, diagnostic: D)
-    where
-        D: Diagnostic + std::fmt::Debug,
-    {
-        let Some(annotation) = diagnostic.annotation(input) else {
-            println!(
-                "{RESET} failed to print diagnostic, defaulting to debug print: {:?}\n",
-                diagnostic
-            );
-            return;
-        };
-
-        print_error_title(diagnostic);
-
-        let width = annotation
-            .largest_line()
-            .map(|largest| format!("{}", largest + 1).chars().count())
-            .unwrap_or(usize::MAX);
-
-        let (start_line, maybe_end) = annotation.line_range();
-
-        let mut buf = String::new();
-
-        if let Some(end_line) = maybe_end {
-            writeln!(
-                buf,
-                "{CONTEXT} {:>width$} ╭[{RESET}{BOLD}{input_name}: {}:{}{RESET}{CONTEXT}]",
-                "",
-                start_line + 1,
-                end_line + 1
-            )
-            .fmt_expect();
-        } else {
-            writeln!(
-                buf,
-                "{CONTEXT} {:>width$} ╭[{RESET}{input_name}: {}{CONTEXT}]{RESET}",
-                "",
-                start_line + 1
-            )
-            .fmt_expect();
-        }
-
-        for line in annotation.lines() {
-            match line {
-                AnnotatedLine::Line {
-                    line_idx,
-                    has_error,
-                    segments,
-                } => {
-                    let format = if has_error { ERROR } else { CONTEXT };
-                    write!(buf, " {format}{:>width$}{CONTEXT} │ ", line_idx + 1).fmt_expect();
-                    write_segments(&mut buf, segments);
-                }
-                AnnotatedLine::AnnotationOnly { segments } => {
-                    write!(buf, " {:>width$}{CONTEXT} • ", "").fmt_expect();
-                    write_segments(&mut buf, segments);
-                }
-                AnnotatedLine::FlippedOrder => {
-                    write!(buf, " {:>width$}{HIGHLIGHT} ⮁ ", "").fmt_expect();
-                }
-            }
-
-            writeln!(buf, "{RESET}").fmt_expect();
-        }
-        writeln!(buf, "{CONTEXT} {:─>width$}─╯{RESET}", "").fmt_expect();
-
-        println!("{buf}");
-    }
-
-    fn print_error_title<D: Diagnostic>(diagnostic: D) {
-        let code = diagnostic.code();
-        let overview = diagnostic.overview();
-        println!(" {ERROR}[E{code:0>3}]{RESET}{BOLD}: {overview}{RESET}");
-    }
-
-    fn write_segments(buf: &mut String, segments: Vec<AnnotatedSegment>) {
-        for segment in segments {
-            write_segment(buf, segment);
+impl Diagnostic for InstrPassError {
+    fn code(&self) -> usize {
+        match self {
+            Self::ParseError(err) => err.code(),
         }
     }
 
-    fn write_segment(buf: &mut String, segment: AnnotatedSegment) {
-        let AnnotatedSegment(content, format) = segment;
-        write!(buf, "{RESET}").fmt_expect();
-        match format {
-            AnnotationFormat::Source => write!(buf, "{SOURCE}").fmt_expect(),
-            AnnotationFormat::SourceComment => write!(buf, "{COMMENT}").fmt_expect(),
-            AnnotationFormat::Text => write!(buf, "{BOLD}").fmt_expect(),
-            AnnotationFormat::Error => write!(buf, "{ERROR}").fmt_expect(),
-            AnnotationFormat::Highlight => write!(buf, "{HIGHLIGHT}").fmt_expect(),
+    fn overview(&self) -> String {
+        match self {
+            Self::ParseError(err) => err.overview(),
         }
-        write!(buf, "{content}").fmt_expect();
     }
 
-    trait FmtExpect {
-        fn fmt_expect(self);
-    }
-
-    impl FmtExpect for Result<(), std::fmt::Error> {
-        fn fmt_expect(self) {
-            if let Err(err) = self {
-                panic!(
-                    "error formatting to string buffer for error annotation (root cause: {err})"
-                );
-            }
+    fn annotation(&self, source: &str) -> Option<Annotation> {
+        match self {
+            Self::ParseError(err) => err.annotation(source),
         }
     }
 }

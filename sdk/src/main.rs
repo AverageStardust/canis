@@ -1,16 +1,17 @@
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{fmt::Display, fs::File, io::Read, path::PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 
 use crate::{
     cli::{Cli, Command},
-    log::Log,
+    smart_file::SmartFile,
 };
 
+use canis_sdk::{CommandError, instruction::registry::get_instruction_meta, log::Log, processes};
+
 mod cli;
-mod log;
-mod processes;
+mod smart_file;
 
 fn main() {
     let cli = Cli::parse();
@@ -38,10 +39,7 @@ fn run_command(log: &mut Log, command: Command) -> Result<(), CommandError> {
                 .with_context(|| format!("input file path does not exist ({})", file.display()))?;
 
             let output = match output {
-                Some(path) => {
-                    // TODO: Validate
-                    path
-                }
+                Some(path) => path,
                 None => PathBuf::from("program.hex"),
             };
 
@@ -51,17 +49,7 @@ fn run_command(log: &mut Log, command: Command) -> Result<(), CommandError> {
                     file_canonicalized.display()
                 )
             })?;
-            let output_file = File::create(&output).with_context(|| {
-                format!(
-                    "failed to open output file for writing ({})",
-                    output.display()
-                )
-            })?;
-
-            let output = output.canonicalize().with_context(|| {
-                format!("output file path does not exist ({})", output.display())
-            })?;
-
+            let mut output_file = SmartFile::new(output.clone());
             let mut input = String::new();
             input_file.read_to_string(&mut input).with_context(|| {
                 format!(
@@ -73,31 +61,125 @@ fn run_command(log: &mut Log, command: Command) -> Result<(), CommandError> {
             log.status_with("Assembling", || {
                 format!("from `{}`", file_canonicalized.display())
             });
-            processes::assemble(log, &input, file.display(), &output_file).map_err(
-                |err| match err {
+            processes::assemble(log, &input, file.display(), &mut output_file).map_err(|err| {
+                match err {
                     CommandError::Anyhow(error) => CommandError::Anyhow(error.context(format!(
                         "failed to assemble input ({})",
                         file_canonicalized.display()
                     ))),
                     CommandError::InternallyPrinted => CommandError::InternallyPrinted,
-                },
-            )?;
-            log.status_with("Finished", || format!("assembling `{}`", output.display()));
+                }
+            })?;
+
+            let output_name = output.canonicalize().with_context(|| {
+                format!("output file path does not exist ({})", output.display())
+            })?;
+
+            log.status_with("Finished", || {
+                format!("assembling `{}`", output_name.display())
+            });
+        }
+        Command::Instruction(cli::InstructionCommand::List) => {
+            let mut meta = get_instruction_meta();
+            meta.sort();
+
+            println!("{}", render_header("Instructions:"));
+
+            let (widest_name, widest_display) =
+                meta.iter().fold((0, 0), |(name, display), meta| {
+                    (
+                        name.max(meta.name.chars().count()),
+                        display.max(
+                            meta.details
+                                .as_ref()
+                                .map(|details| details.display_name.chars().count())
+                                .unwrap_or(0),
+                        ),
+                    )
+                });
+
+            for meta in meta {
+                print!(
+                    "  {}{:widest_name$}{}",
+                    anstyle::Style::new().bold(),
+                    meta.name,
+                    anstyle::Reset
+                );
+
+                if let Some(details) = &meta.details {
+                    print!(
+                        "  {:widest_display$}  {}",
+                        details.display_name, details.short_description
+                    );
+                }
+
+                println!()
+            }
+        }
+        Command::Instruction(cli::InstructionCommand::Explain { meta }) => {
+            if let Some(explain) = meta.explain() {
+                for (idx, variant) in explain.into_iter().enumerate() {
+                    if idx > 0 {
+                        println!("\n")
+                    }
+                    print!("{} {}", render_header("Usage:"), render_bold(meta.name));
+                    for (name, _types) in variant.args.iter() {
+                        print!(" <{}>", name)
+                    }
+                    println!("\n");
+                    if variant.args.len() > 0 {
+                        println!("{}", render_header("Arguments:"));
+                        let max_width = variant
+                            .args
+                            .iter()
+                            .map(|(name, _types)| name.chars().count())
+                            .max()
+                            .unwrap_or(0);
+                        for (name, types) in variant.args {
+                            print!(
+                                "  {}{name:max_width$}{}  {}",
+                                anstyle::Style::new().bold(),
+                                anstyle::Reset,
+                                types
+                                    .iter_names()
+                                    .map(|(name, val)| {
+                                        let mut string = String::from(name);
+                                        if val.is_immediate() {
+                                            let bits = types.expected_bits();
+                                            string.push_str(
+                                                format!(
+                                                    " ({} bit{})",
+                                                    bits,
+                                                    (bits == 1).then_some("").unwrap_or("s")
+                                                )
+                                                .as_str(),
+                                            );
+                                        }
+                                        string
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                            println!();
+                        }
+                        println!();
+                    }
+                    println!(
+                        "{}\n  {}",
+                        render_header("Description:"),
+                        variant.description
+                    );
+                }
+            } else {
+                println!(
+                    "No explain details available for instruction '{}'",
+                    render_bold(meta.name)
+                );
+            }
         }
     }
 
     Ok(())
-}
-
-enum CommandError {
-    Anyhow(anyhow::Error),
-    InternallyPrinted,
-}
-
-impl From<anyhow::Error> for CommandError {
-    fn from(value: anyhow::Error) -> Self {
-        CommandError::Anyhow(value)
-    }
 }
 
 fn render_and_indent(err: &anyhow::Error) -> String {
@@ -111,4 +193,20 @@ fn render_and_indent(err: &anyhow::Error) -> String {
         }
     }
     result
+}
+
+fn render_bold(display: impl Display) -> String {
+    format!(
+        "{}{display}{}",
+        anstyle::Style::new().bold(),
+        anstyle::Reset
+    )
+}
+
+fn render_header(display: impl Display) -> String {
+    format!(
+        "{}{display}{}",
+        anstyle::Style::new().bold().underline(),
+        anstyle::Reset
+    )
 }

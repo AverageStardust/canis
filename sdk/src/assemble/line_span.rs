@@ -47,10 +47,6 @@ impl Span {
     pub fn end(&self) -> usize {
         self.end_char
     }
-
-    pub fn range(&self) -> Range<usize> {
-        self.start_char..self.end_char
-    }
 }
 
 #[derive(Debug)]
@@ -63,6 +59,30 @@ impl<'a> SpannedLine<'a> {
 
     pub fn as_span(&self) -> Span {
         self.1
+    }
+
+    pub fn take(&self, chars: usize) -> Self {
+        let size = self.0.chars().take(chars).map(|ch| ch.len_utf8()).sum();
+        Self(
+            &self.0[..size],
+            Span::new(
+                self.1.line(),
+                self.1.start(),
+                (self.1.start() + chars).min(self.1.end()),
+            ),
+        )
+    }
+
+    pub fn skip(&self, chars: usize) -> Self {
+        let size = self.0.chars().take(chars).map(|ch| ch.len_utf8()).sum();
+        Self(
+            &self.0[size..],
+            Span::new(
+                self.1.line(),
+                (self.1.start() + chars).min(self.1.end()),
+                self.1.end(),
+            ),
+        )
     }
 
     pub fn split_once(&self, delimiter: char) -> Option<(Self, Self)> {
@@ -147,5 +167,15 @@ impl<'a> SpannedLine<'a> {
                 ),
             )
         }
+    }
+
+    #[cfg(test)]
+    pub fn mock(content: &'a str) -> Self {
+        Self(content, Span::new(0, 0, content.chars().count()))
+    }
+
+    #[cfg(test)]
+    pub fn mock_with_span(content: &'a str, span: Span) -> Self {
+        Self(content, span)
     }
 }

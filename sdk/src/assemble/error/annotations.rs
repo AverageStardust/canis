@@ -1,6 +1,6 @@
 use std::iter::repeat_n;
 
-use crate::processes::assemble::line_span::Span;
+use crate::assemble::line_span::Span;
 
 #[derive(PartialEq)]
 pub enum AnnotationFormat {
@@ -300,7 +300,7 @@ impl Annotatable<1> for LineOnly {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LineChar {
     line_idx: usize,
     char: usize,
@@ -372,7 +372,7 @@ impl Annotatable<1> for LineChar {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct LineSpan {
     line_idx: usize,
     start_char: usize,
@@ -463,7 +463,7 @@ impl Annotatable<1> for LineSpan {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct CausalMultiLineSpan {
     cause: LineSpan,
     effect: LineSpan,
