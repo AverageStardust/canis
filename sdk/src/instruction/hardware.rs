@@ -1,7 +1,7 @@
 use crate::instruction::{
     hardware::helpers::itype_instr,
     instruction::{Instruction, InstructionMetaExplain, InstructionMetaExplainVariant},
-    parser::{Parser, ParserTypes},
+    parser::{ParsedType, Parser, ParserTypes},
     raw::RawInstruction,
     registry::InstructionParserResult,
     types::{Distance, Fun3, Immediate, Location, OpCode, Register},
@@ -474,7 +474,102 @@ inventory::submit! {
     Instruction::new("bgez", instr_bgez)
 }
 
-// TODO: Implement alts & Jumps
+/// Generates a `jmp` instruction from the given distance
+pub fn gen_jmp(distance: Distance) -> RawInstruction {
+    RawInstruction::j_type(distance.into(), 0.into(), OpCode::<0b1010>)
+}
+
+fn instr_jmp(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let distance = parser.require_distance_to_label(pc, 9)?;
+    Ok(gen_jmp(distance).into())
+}
+
+inventory::submit! {
+    Instruction::new("jmp", instr_jmp)
+}
+
+/// Generates a `ret` instruction from the given register and immediate
+pub fn gen_ret(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b110>, imm, OpCode::<0b1011>)
+}
+
+fn instr_ret(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    use super::parser::ParseError;
+
+    let rs1 = parser.require_register();
+    let imm = parser.require_immediate(9);
+
+    match (rs1, imm) {
+        (Ok(rs1), Ok(imm)) => Ok(gen_ret(rs1, imm).into()),
+        (Ok(rs1), Err(ParseError::MissingImmediate(_))) => Ok(gen_ret(rs1, 0.into()).into()),
+        (Err(ParseError::MissingRegister(_)), Err(ParseError::MissingImmediate(_))) => {
+            Ok(gen_ret(0.into(), 0.into()).into())
+        }
+        (Err(reg_err), _) => Err(reg_err),
+        (Ok(_rs1), Err(imm_err)) => Err(imm_err),
+    }
+}
+
+inventory::submit! {
+    Instruction::new("ret", instr_ret)
+}
+
+/// Generates a `call` instruction from the given distance
+pub fn gen_call(distance: Distance, rd: Register) -> RawInstruction {
+    RawInstruction::j_type(distance.into(), rd, OpCode::<0b1100>)
+}
+
+fn instr_call(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let value = parser.require(
+        pc,
+        (ParserTypes::Label | ParserTypes::Register).with_expected_distance_bits(9),
+    )?;
+    match value {
+        ParsedType::Register(reg) => {
+            let distance = parser.require_distance_to_label(pc, 9)?;
+            Ok(gen_call(distance, reg).into())
+        }
+        ParsedType::Label(distance) => Ok(gen_call(distance, 0.into()).into()),
+        _ => unreachable!(),
+    }
+}
+
+inventory::submit! {
+    Instruction::new("call", instr_call)
+}
+
+/// Generates a `calle` instruction from the given distance
+pub fn gen_calle(distance: Distance, rd: Register) -> RawInstruction {
+    RawInstruction::e_type(
+        distance.into(),
+        0.into(),
+        Fun3::<0b000>,
+        0.into(),
+        rd,
+        OpCode::<0b1101>,
+    )
+}
+
+fn instr_calle(pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let value = parser.require(
+        pc,
+        (ParserTypes::Label | ParserTypes::Register).with_expected_distance_bits(16),
+    )?;
+    match value {
+        ParsedType::Register(reg) => {
+            let distance = parser.require_distance_to_label(pc, 16)?;
+            Ok(gen_calle(distance, reg).into())
+        }
+        ParsedType::Label(distance) => Ok(gen_calle(distance, 0.into()).into()),
+        _ => unreachable!(),
+    }
+}
+
+inventory::submit! {
+    Instruction::new("calle", instr_calle)
+}
+
+// TODO: Implement alts
 
 /// Generates a `in` instruction from the given register and immediate
 pub fn gen_in(rd: Register, imm: Immediate) -> RawInstruction {
@@ -503,6 +598,14 @@ fn instr_out(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
 
 inventory::submit! {
     Instruction::new("out", instr_out)
+}
+
+fn instr_break(_pc: Location, _parser: &mut Parser) -> InstructionParserResult {
+    Ok(RawInstruction::Small(0xFFFF).into())
+}
+
+inventory::submit! {
+    Instruction::new("break", instr_break)
 }
 
 mod helpers {

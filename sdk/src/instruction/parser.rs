@@ -1,7 +1,4 @@
-use std::{
-    num::{IntErrorKind, ParseIntError},
-    ops::BitOrAssign,
-};
+use std::num::{IntErrorKind, ParseIntError};
 
 use crate::{
     assemble::{
@@ -61,7 +58,43 @@ impl<'a> Parser<'a> {
         parse_label_distance(label_val, self.label_registry, here, expected_bits)
     }
 
-    // fn require(&mut self, types: ParserTypes) -> ParsedType {}
+    pub(super) fn require(
+        &mut self,
+        here: Location,
+        types: ParserTypes,
+    ) -> Result<ParsedType, ParseError> {
+        let val = self.bump();
+        if val.collapse().is_none() {
+            let span = val.trim().as_span();
+            Err(ParseError::MissingValue(
+                annotations::LineChar::new(span.line(), span.start()),
+                types,
+            ))
+        } else if types.contains(ParserTypes::Register)
+            && let Ok(reg) = parse_register(val.clone())
+        {
+            Ok(ParsedType::Register(reg))
+        } else if types.contains(ParserTypes::UImmediate)
+            && let Ok(imm) = parse_unsigned_immediate(val.clone(), types.expected_bits())
+        {
+            Ok(ParsedType::UImmediate(imm))
+        } else if types.contains(ParserTypes::Immediate)
+            && let Ok(imm) = parse_immediate(val.clone(), types.expected_bits())
+        {
+            Ok(ParsedType::Immediate(imm))
+        } else if types.contains(ParserTypes::Label)
+            && let Ok(distance) = parse_label_distance(
+                val.clone(),
+                self.label_registry,
+                here,
+                types.expected_distance_bits(),
+            )
+        {
+            Ok(ParsedType::Label(distance))
+        } else {
+            Err(ParseError::NotValue(val.as_span().into(), types))
+        }
+    }
 
     pub(super) fn require_empty(self) -> Result<(), ParseError> {
         match self.src.collapse() {
@@ -229,20 +262,28 @@ fn parse_label_distance(
                 span.end(),
             )))
         } else {
-            let location = labels.get_label(label_span.as_str());
-            match location {
-                LabelRegistryResult::Found((location, span)) => (location - here)
-                    .limit(expected_bits)
-                    .ok_or(ParseError::DistantLabel {
-                        span: annotations::CausalMultiLineSpan::new(
-                            span.into(),
-                            label_span.as_span().into(),
-                        ),
-                        distance: location - here,
-                        expected_bits,
-                    }),
-                LabelRegistryResult::Incomplete => Ok(Distance::new()),
-                LabelRegistryResult::NotFound => Err(ParseError::UnknownLabel(span.into())),
+            match label_span.as_str() {
+                "x0" | "x1" | "x2" | "x3" | "x4" | "x5" | "x6" | "x7" | "ra" | "sp" | "t0"
+                | "t1" | "s0" | "s1" | "a0" | "a1" => Err(ParseError::LabelHasRegisterName(
+                    label_span.as_span().into(),
+                )),
+                _ => {
+                    let location = labels.get_label(label_span.as_str());
+                    match location {
+                        LabelRegistryResult::Found((location, span)) => (location - here)
+                            .limit(expected_bits)
+                            .ok_or(ParseError::DistantLabel {
+                                span: annotations::CausalMultiLineSpan::new(
+                                    span.into(),
+                                    label_span.as_span().into(),
+                                ),
+                                distance: location - here,
+                                expected_bits,
+                            }),
+                        LabelRegistryResult::Incomplete => Ok(Distance::new()),
+                        LabelRegistryResult::NotFound => Err(ParseError::UnknownLabel(span.into())),
+                    }
+                }
             }
         }
     } else {
@@ -256,7 +297,7 @@ fn parse_label_distance(
 
 bitflags::bitflags! {
     #[derive(Debug, PartialEq, Clone, Copy)]
-    pub struct ParserTypes: u8 {
+    pub struct ParserTypes: u16 {
         const Register = 0b00000001;
         const Immediate = 0b00000010;
         const UImmediate = 0b00000100;
@@ -270,19 +311,31 @@ impl ParserTypes {
     }
 
     pub(crate) fn with_expected_bits(self, expected_bits: u8) -> Self {
-        Self::from_bits_retain((self.bits() & 0b00001111) | (expected_bits.saturating_sub(1) << 4))
+        Self::from_bits_retain(
+            (self.bits() & 0b1111111100001111) | (expected_bits.saturating_sub(1) << 4) as u16,
+        )
     }
 
     pub fn expected_bits(&self) -> u8 {
-        (self.bits() >> 4) + 1
+        (((self.bits() >> 4) & 0b00001111) + 1) as u8
+    }
+
+    pub(crate) fn with_expected_distance_bits(self, expected_bits: u8) -> Self {
+        Self::from_bits_retain(
+            (self.bits() & 0b1111000011111111) | ((expected_bits as u16).saturating_sub(1) << 8),
+        )
+    }
+
+    pub fn expected_distance_bits(&self) -> u8 {
+        (((self.bits() >> 8) & 0b00001111) + 1) as u8
     }
 }
 
-enum ParsedType {
+pub(super) enum ParsedType {
     Register(Register),
     Immediate(Immediate),
     UImmediate(Immediate),
-    Label(Location),
+    Label(Distance),
 }
 
 #[derive(Debug, PartialEq)]
@@ -317,6 +370,8 @@ pub enum ParseError {
     UnknownLabel(annotations::LineSpan),
     /// A label was expected, but the found content could never be a label
     NotLabel(annotations::LineSpan),
+    /// A label was expected, but the found content could never be a label
+    LabelHasRegisterName(annotations::LineSpan),
     /// A label was both expected and found, but is too far from the actual label's location to jump
     DistantLabel {
         span: annotations::CausalMultiLineSpan,
@@ -328,7 +383,7 @@ pub enum ParseError {
     /// A mixed value was expected, but not content could be found
     MissingValue(annotations::LineChar, ParserTypes),
     /// A mixed value was expected, but the found content did not match any possible value
-    NotValue(annotations::LineChar, ParserTypes),
+    NotValue(annotations::LineSpan, ParserTypes),
 
     // Other Errors
     /// Excess content was found in the current line
@@ -348,10 +403,11 @@ impl Diagnostic for ParseError {
             Self::MissingLabel(_) => 207,
             Self::UnknownLabel(_) => 208,
             Self::NotLabel(_) => 209,
-            Self::DistantLabel { .. } => 210,
-            Self::MissingValue(_, _) => 211,
-            Self::NotValue(_, _) => 212,
-            Self::ExcessContent(_) => 213,
+            Self::LabelHasRegisterName(_) => 210,
+            Self::DistantLabel { .. } => 211,
+            Self::MissingValue(_, _) => 212,
+            Self::NotValue(_, _) => 213,
+            Self::ExcessContent(_) => 214,
         }
     }
 
@@ -367,6 +423,7 @@ impl Diagnostic for ParseError {
             Self::MissingLabel(_) => "missing label argument",
             Self::UnknownLabel(_) => "unknown label",
             Self::NotLabel(_) => "invalid label",
+            Self::LabelHasRegisterName(_) => "label has register name",
             Self::DistantLabel { .. } => "label too far",
             Self::MissingValue(_, _) => "missing argument",
             Self::NotValue(_, _) => "invalid argument",
@@ -433,6 +490,11 @@ impl Diagnostic for ParseError {
                 and may not begin with numbers.",
                 ),
             ),
+            Self::LabelHasRegisterName(span) => span.annotate(
+                source,
+                [|reg_name| format!("The label \"{reg_name}\" shadows a register")],
+                Some("Labels are not permitted to shadow register names"),
+            ),
             Self::DistantLabel {
                 span,
                 distance,
@@ -459,8 +521,49 @@ impl Diagnostic for ParseError {
             Self::ExcessContent(span) => {
                 span.annotate(source, ["Unexpected values found here"], None)
             }
-            // TODO: More of these errors
-            _ => None,
+            Self::MissingValue(span, types) => {
+                if types.intersection(ParserTypes::all()).is_empty() {
+                    span.annotate(source, ["Missing value of type NONE"], None)
+                } else {
+                    let type_names = types.iter_names().map(|(name, _)| name).collect::<Vec<_>>();
+                    let multiplier = if type_names.len() > 1 { "s" } else { "" };
+                    span.annotate(
+                        source,
+                        [|_| {
+                            format!(
+                                "Missing value of type{multiplier}: {}",
+                                type_names.join(", ")
+                            )
+                        }],
+                        None,
+                    )
+                }
+            }
+            Self::NotValue(span, types) => {
+                if types.intersection(ParserTypes::all()).is_empty() {
+                    span.annotate(
+                        source,
+                        ["Value found here does not match the expected type NONE"],
+                        None,
+                    )
+                } else {
+                    let type_names = types.iter_names().map(|(name, _)| name).collect::<Vec<_>>();
+                    let multiplier = if type_names.len() > 1 { "s" } else { "" };
+                    span.annotate(
+                        source,
+                        [|_| {
+                            format!(
+                                "Value found here does not match the expected type{multiplier}: {}",
+                                type_names.join(", ")
+                            )
+                        }],
+                        Some(
+                            "Run \"instruction explain <INSTRUCTION>\" to get more \
+                            information about how to use this instruction",
+                        ),
+                    )
+                }
+            }
         }
     }
 }

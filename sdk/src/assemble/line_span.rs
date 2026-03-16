@@ -49,7 +49,7 @@ impl Span {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpannedLine<'a>(&'a str, Span);
 
 impl<'a> SpannedLine<'a> {
