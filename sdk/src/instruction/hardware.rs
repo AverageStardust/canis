@@ -1,5 +1,4 @@
 use crate::instruction::{
-    hardware::helpers::itype_instr,
     instruction::{Instruction, InstructionMetaExplain, InstructionMetaExplainVariant},
     parser::{ParsedType, Parser, ParserTypes},
     raw::RawInstruction,
@@ -179,8 +178,13 @@ pub fn gen_ori(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b000>, imm, rd, OpCode::<0b0010>)
 }
 
+/// Generates an alternate `ori` instruction from the given registers and immediate
+pub fn gen_alt_ori(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b000>, imm, rd, OpCode::<0b1110>)
+}
+
 fn instr_ori(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_ori)
+    helpers::itype_instr(parser, gen_ori, gen_alt_ori)
 }
 
 inventory::submit! {
@@ -193,7 +197,7 @@ inventory::submit! {
             InstructionMetaExplainVariant::new("Performs a bitwise OR on the value in rs1 with the immediate imm, placing the result into rd.")
             .arg("rd", ParserTypes::Register)
             .arg("rs1", ParserTypes::Register)
-            .arg("imm", ParserTypes::Immediate.with_expected_bits(3))
+            .arg("imm", ParserTypes::Immediate.with_expected_bits(4))
         )
     )
 }
@@ -203,8 +207,13 @@ pub fn gen_xori(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b001>, imm, rd, OpCode::<0b0010>)
 }
 
+/// Generates an alternate `xori` instruction from the given registers and immediate
+pub fn gen_alt_xori(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b001>, imm, rd, OpCode::<0b1110>)
+}
+
 fn instr_xori(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_xori)
+    helpers::itype_instr(parser, gen_xori, gen_alt_xori)
 }
 
 inventory::submit! {
@@ -216,8 +225,13 @@ pub fn gen_andi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b010>, imm, rd, OpCode::<0b0010>)
 }
 
+/// Generates an alternate `andi` instruction from the given registers and immediate
+pub fn gen_alt_andi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b010>, imm, rd, OpCode::<0b1110>)
+}
+
 fn instr_andi(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_andi)
+    helpers::itype_instr(parser, gen_andi, gen_alt_andi)
 }
 
 inventory::submit! {
@@ -229,8 +243,13 @@ pub fn gen_muli(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b011>, imm, rd, OpCode::<0b0010>).into()
 }
 
+/// Generates an alternate `muli` instruction from the given registers and immediate
+pub fn gen_alt_muli(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b011>, imm, rd, OpCode::<0b1110>).into()
+}
+
 fn instr_muli(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_muli)
+    helpers::itype_instr(parser, gen_muli, gen_alt_muli)
 }
 
 inventory::submit! {
@@ -242,8 +261,13 @@ pub fn gen_addi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b100>, imm, rd, OpCode::<0b0010>).into()
 }
 
+/// Generates an alternate `addi` instruction from the given registers and immediate
+pub fn gen_alt_addi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b100>, imm, rd, OpCode::<0b1110>).into()
+}
+
 fn instr_addi(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_addi)
+    helpers::itype_instr(parser, gen_addi, gen_alt_addi)
 }
 
 inventory::submit! {
@@ -255,8 +279,13 @@ pub fn gen_subi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b101>, imm, rd, OpCode::<0b0010>).into()
 }
 
+/// Generates an alternate `subi` instruction from the given registers and immediate
+pub fn gen_alt_subi(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::i_type(rs1, Fun3::<0b101>, imm, rd, OpCode::<0b1110>).into()
+}
+
 fn instr_subi(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    helpers::itype_instr(parser, gen_subi)
+    helpers::itype_instr(parser, gen_subi, gen_alt_subi)
 }
 
 inventory::submit! {
@@ -270,17 +299,18 @@ pub fn gen_sli(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
 
 /// Generates an alternate `sli` instruction from the given registers and immediate
 pub fn gen_sli_alternate(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
-    RawInstruction::i_type(rs1, Fun3::<0b110>, imm, rd, OpCode::<0b1111>).into()
+    RawInstruction::i_type(rs1, Fun3::<0b110>, imm, rd, OpCode::<0b1110>).into()
 }
 
 fn instr_sli(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    itype_instr(parser, |rd, rs1, imm| {
-        if imm > 3 && imm < 12 {
-            gen_sli_alternate(rd, rs1, imm)
-        } else {
-            gen_sli(rd, rs1, imm)
-        }
-    })
+    let rd = parser.require_register()?;
+    let rs1 = parser.require_register()?;
+    let imm = parser.require_unsigned_immediate(4)?;
+    if imm > 3 && imm < 12 {
+        Ok(gen_sli_alternate(rd, rs1, imm).into())
+    } else {
+        Ok(gen_sli(rd, rs1, imm).into())
+    }
 }
 
 inventory::submit! {
@@ -294,17 +324,18 @@ pub fn gen_sri(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
 
 /// Generates an alternate `sri` instruction from the given registers and immediate
 pub fn gen_sri_alternate(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
-    RawInstruction::i_type(rs1, Fun3::<0b111>, imm, rd, OpCode::<0b1111>).into()
+    RawInstruction::i_type(rs1, Fun3::<0b111>, imm, rd, OpCode::<0b1110>).into()
 }
 
 fn instr_sri(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
-    itype_instr(parser, |rd, rs1, imm| {
-        if imm > 3 && imm < 12 {
-            gen_sri_alternate(rd, rs1, imm)
-        } else {
-            gen_sri(rd, rs1, imm)
-        }
-    })
+    let rd = parser.require_register()?;
+    let rs1 = parser.require_register()?;
+    let imm = parser.require_unsigned_immediate(4)?;
+    if imm > 3 && imm < 12 {
+        Ok(gen_sri_alternate(rd, rs1, imm).into())
+    } else {
+        Ok(gen_sri(rd, rs1, imm).into())
+    }
 }
 
 inventory::submit! {
@@ -569,8 +600,6 @@ inventory::submit! {
     Instruction::new("calle", instr_calle)
 }
 
-// TODO: Implement alts
-
 /// Generates a `in` instruction from the given register and immediate
 pub fn gen_in(rd: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(0.into(), Fun3::<0b000>, imm, rd, OpCode::<0b1111>)
@@ -623,14 +652,23 @@ mod helpers {
     }
 
     #[inline(always)]
-    pub(super) fn itype_instr<F>(parser: &mut Parser, generator: F) -> InstructionParserResult
+    pub(super) fn itype_instr<F, G>(
+        parser: &mut Parser,
+        generator: F,
+        alt_generator: G,
+    ) -> InstructionParserResult
     where
         F: Fn(Register, Register, Immediate) -> RawInstruction,
+        G: Fn(Register, Register, Immediate) -> RawInstruction,
     {
         let rd = parser.require_register()?;
         let rs1 = parser.require_register()?;
-        let imm = parser.require_immediate(3)?;
-        Ok(generator(rd, rs1, imm).into())
+        let imm = parser.require_immediate(4)?;
+        if (*imm as i16) > 3 || (*imm as i16) < -4 {
+            Ok(alt_generator(rd, rs1, imm).into())
+        } else {
+            Ok(generator(rd, rs1, imm).into())
+        }
     }
 
     #[inline(always)]
