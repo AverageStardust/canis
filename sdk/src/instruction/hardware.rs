@@ -298,7 +298,7 @@ pub fn gen_sli(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
 }
 
 /// Generates an alternate `sli` instruction from the given registers and immediate
-pub fn gen_sli_alternate(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+pub fn gen_alt_sli(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b110>, imm, rd, OpCode::<0b1110>).into()
 }
 
@@ -307,7 +307,7 @@ fn instr_sli(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
     let rs1 = parser.require_register()?;
     let imm = parser.require_unsigned_immediate(4)?;
     if imm > 3 && imm < 12 {
-        Ok(gen_sli_alternate(rd, rs1, imm).into())
+        Ok(gen_alt_sli(rd, rs1, imm).into())
     } else {
         Ok(gen_sli(rd, rs1, imm).into())
     }
@@ -323,7 +323,7 @@ pub fn gen_sri(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
 }
 
 /// Generates an alternate `sri` instruction from the given registers and immediate
-pub fn gen_sri_alternate(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+pub fn gen_alt_sri(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
     RawInstruction::i_type(rs1, Fun3::<0b111>, imm, rd, OpCode::<0b1110>).into()
 }
 
@@ -332,7 +332,7 @@ fn instr_sri(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
     let rs1 = parser.require_register()?;
     let imm = parser.require_unsigned_immediate(4)?;
     if imm > 3 && imm < 12 {
-        Ok(gen_sri_alternate(rd, rs1, imm).into())
+        Ok(gen_alt_sri(rd, rs1, imm).into())
     } else {
         Ok(gen_sri(rd, rs1, imm).into())
     }
@@ -342,7 +342,115 @@ inventory::submit! {
     Instruction::new_with_meta("sri", instr_sri, "Shift Right with Immediate", "rd, CRY = rs1 >> imm")
 }
 
-// TODO: Accumulate & Extended instructions
+/// Generates an `ora` instruction from the given register and immediate
+pub fn gen_ora(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b000>, imm, OpCode::<0b0011>)
+}
+
+fn instr_ora(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_ora)
+}
+
+inventory::submit! {
+    Instruction::new("ora", instr_ora)
+}
+
+/// Generates an `xora` instruction from the given register and immediate
+pub fn gen_xora(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b001>, imm, OpCode::<0b0011>)
+}
+
+fn instr_xora(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_xora)
+}
+
+inventory::submit! {
+    Instruction::new("xora", instr_xora)
+}
+
+/// Generates an `anda` instruction from the given register and immediate
+pub fn gen_anda(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b010>, imm, OpCode::<0b0011>)
+}
+
+fn instr_anda(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_anda)
+}
+
+inventory::submit! {
+    Instruction::new("anda", instr_anda)
+}
+
+/// Generates an `mula` instruction from the given register and immediate
+pub fn gen_mula(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b011>, imm, OpCode::<0b0011>)
+}
+
+fn instr_mula(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_mula)
+}
+
+inventory::submit! {
+    Instruction::new("mula", instr_mula)
+}
+
+/// Generates an `adda` instruction from the given register and immediate
+pub fn gen_adda(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b100>, imm, OpCode::<0b0011>)
+}
+
+fn instr_adda(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_adda)
+}
+
+inventory::submit! {
+    Instruction::new("adda", instr_adda)
+}
+
+/// Generates an `suba` instruction from the given register and immediate
+pub fn gen_suba(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b101>, imm, OpCode::<0b0011>)
+}
+
+fn instr_suba(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::acc_btype_instr(parser, gen_suba)
+}
+
+inventory::submit! {
+    Instruction::new("suba", instr_suba)
+}
+
+/// Generates an `sla` instruction from the given register and immediate
+pub fn gen_sla(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b110>, imm, OpCode::<0b0011>)
+}
+
+fn instr_sla(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let rd = parser.require_register()?;
+    let imm = parser.require_unsigned_immediate(6)?;
+    Ok(gen_sla(rd, imm).into())
+}
+
+inventory::submit! {
+    Instruction::new("sla", instr_sla)
+}
+
+/// Generates an `sra` instruction from the given register and immediate
+pub fn gen_sra(rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::b_type(rs1, Fun3::<0b111>, imm, OpCode::<0b0011>)
+}
+
+fn instr_sra(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    let rd = parser.require_register()?;
+    let imm = parser.require_unsigned_immediate(6)?;
+    Ok(gen_sra(rd, imm).into())
+}
+
+inventory::submit! {
+    Instruction::new("sra", instr_sra)
+}
+
+// TODO: Extended instructions
 
 /// Generates an `li` instruction from the given register and immediate
 pub fn gen_li(rd: Register, imm: Immediate) -> RawInstruction {
@@ -693,6 +801,16 @@ mod helpers {
         let rd = parser.require_register()?;
         let distance = parser.require_distance_to_label(pc, 6)?;
         Ok(generator(rd, distance).into())
+    }
+
+    #[inline(always)]
+    pub(super) fn acc_btype_instr<F>(parser: &mut Parser, generator: F) -> InstructionParserResult
+    where
+        F: Fn(Register, Immediate) -> RawInstruction,
+    {
+        let rd = parser.require_register()?;
+        let imm = parser.require_immediate(6)?;
+        Ok(generator(rd, imm).into())
     }
 
     #[inline(always)]

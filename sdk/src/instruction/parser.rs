@@ -189,7 +189,12 @@ fn parse_unsigned_immediate(
         _ => 10,
     };
 
-    parse_and_restrict_unsigned(imm_val, expected_bits, radix).map(Immediate::from)
+    parse_and_restrict_unsigned(imm_val, expected_bits, radix)
+        .map_err(|err| match err {
+            ParseError::NotImmediate(span) => ParseError::NotUnsignedImmediate(span),
+            other => other,
+        })
+        .map(Immediate::from)
 }
 
 fn handle_parse_int_error(err: ParseIntError, expected_bits: u8, imm_span: Span) -> ParseError {
@@ -331,6 +336,7 @@ impl ParserTypes {
     }
 }
 
+#[allow(dead_code)]
 pub(super) enum ParsedType {
     Register(Register),
     Immediate(Immediate),

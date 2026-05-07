@@ -1,7 +1,4 @@
-use std::{
-    iter::{Enumerate, Map},
-    ops::Range,
-};
+use std::iter::{Enumerate, Map};
 
 pub trait SpannableIter<'a> {
     type Spanned: Iterator<Item = SpannedLine<'a>>;
