@@ -450,7 +450,125 @@ inventory::submit! {
     Instruction::new("sra", instr_sra)
 }
 
-// TODO: Extended instructions
+/// Generates an `ore` instruction from the given registers and immediate
+pub fn gen_ore(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b000>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_ore(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_ore)
+}
+
+inventory::submit! {
+    Instruction::new("ore", instr_ore)
+}
+
+/// Generates an `xore` instruction from the given registers and immediate
+pub fn gen_xore(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b001>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_xore(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_xore)
+}
+
+inventory::submit! {
+    Instruction::new("xore", instr_xore)
+}
+
+/// Generates an `ande` instruction from the given registers and immediate
+pub fn gen_ande(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b010>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_ande(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_ande)
+}
+
+inventory::submit! {
+    Instruction::new("ande", instr_ande)
+}
+
+/// Generates an `mule` instruction from the given registers and immediate
+pub fn gen_mule(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b011>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_mule(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_mule)
+}
+
+inventory::submit! {
+    Instruction::new("mule", instr_mule)
+}
+
+/// Generates an `adde` instruction from the given registers and immediate
+pub fn gen_adde(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b100>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_adde(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_adde)
+}
+
+inventory::submit! {
+    Instruction::new("adde", instr_adde)
+}
+
+/// Generates an `sube` instruction from the given registers and immediate
+pub fn gen_sube(rd: Register, rs1: Register, imm: Immediate) -> RawInstruction {
+    RawInstruction::e_type(
+        imm,
+        rs1,
+        Fun3::<0b101>,
+        Register::from(0),
+        rd,
+        OpCode::<0b0100>,
+    )
+}
+
+fn instr_sube(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
+    helpers::etype_instr(parser, gen_sube)
+}
+
+inventory::submit! {
+    Instruction::new("sube", instr_sube)
+}
 
 /// Generates an `li` instruction from the given register and immediate
 pub fn gen_li(rd: Register, imm: Immediate) -> RawInstruction {
@@ -811,6 +929,17 @@ mod helpers {
         let rd = parser.require_register()?;
         let imm = parser.require_immediate(6)?;
         Ok(generator(rd, imm).into())
+    }
+
+    #[inline(always)]
+    pub(super) fn etype_instr<F>(parser: &mut Parser, generator: F) -> InstructionParserResult
+    where
+        F: Fn(Register, Register, Immediate) -> RawInstruction,
+    {
+        let rd = parser.require_register()?;
+        let rs1 = parser.require_register()?;
+        let imm = parser.require_immediate(16)?;
+        Ok(generator(rd, rs1, imm).into())
     }
 
     #[inline(always)]
