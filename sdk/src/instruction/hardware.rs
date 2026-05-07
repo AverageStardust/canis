@@ -22,7 +22,8 @@ inventory::submit! {
         "Bitwise OR",
         "rd = rs1 | rs2",
         || InstructionMetaExplain::new(
-            InstructionMetaExplainVariant::new("Performs a bitwise OR on the values in rs1 and rs2, placing the result into rd.")
+            InstructionMetaExplainVariant::new("Performs a bitwise OR on the values in \
+                rs1 and rs2, placing the result into rd.")
                 .arg("rd", ParserTypes::Register)
                 .arg("rs1", ParserTypes::Register)
                 .arg("rs2", ParserTypes::Register)
@@ -194,7 +195,8 @@ inventory::submit! {
         "Bitwise OR with Immediate",
         "rd = rs1 | imm",
         || InstructionMetaExplain::new(
-            InstructionMetaExplainVariant::new("Performs a bitwise OR on the value in rs1 with the immediate imm, placing the result into rd.")
+            InstructionMetaExplainVariant::new("Performs a bitwise OR on the value in \
+                rs1 with the immediate imm, placing the result into rd.")
             .arg("rd", ParserTypes::Register)
             .arg("rs1", ParserTypes::Register)
             .arg("imm", ParserTypes::Immediate.with_expected_bits(4))
@@ -618,10 +620,11 @@ inventory::submit! {
     Instruction::new_with_explain(
         "lm",
         instr_lm,
-        "Store Memory",
+        "Load Memory",
         "rd = M[rs1 + imm]",
         || InstructionMetaExplain::new(
-            InstructionMetaExplainVariant::new("Loads the value stored in memory at the address of rs1 + imm into rs2.")
+            InstructionMetaExplainVariant::new("Loads the value stored in memory at \
+                the address of rs1 + imm into rs2.")
             .arg("rd", ParserTypes::Register)
             .arg("rs1", ParserTypes::Register)
             .arg("imm", ParserTypes::Immediate.with_expected_bits(6))
@@ -645,7 +648,8 @@ inventory::submit! {
         "Store Memory",
         "M[rs1 + imm] = rs2",
         || InstructionMetaExplain::new(
-            InstructionMetaExplainVariant::new("Stores the value stored in rs2 at the address of rs1 + imm in memory.")
+            InstructionMetaExplainVariant::new("Stores the value stored in rs2 at \
+                the address of rs1 + imm in memory.")
             .arg("rs2", ParserTypes::Register)
             .arg("rs1", ParserTypes::Register)
             .arg("imm", ParserTypes::Immediate.with_expected_bits(6))
@@ -742,7 +746,17 @@ fn instr_jmp(pc: Location, parser: &mut Parser) -> InstructionParserResult {
 }
 
 inventory::submit! {
-    Instruction::new("jmp", instr_jmp)
+    Instruction::new_with_explain(
+        "jmp",
+        instr_jmp,
+        "Jump To Label",
+        "PC += imm",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Jump to the given label. \
+                The return address is discarded.")
+                .arg("label", ParserTypes::Label)
+        )
+    )
 }
 
 /// Generates a `ret` instruction from the given register and immediate
@@ -754,7 +768,7 @@ fn instr_ret(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
     use super::parser::ParseError;
 
     let rs1 = parser.require_register();
-    let imm = parser.require_immediate(9);
+    let imm = parser.require_immediate(6);
 
     match (rs1, imm) {
         (Ok(rs1), Ok(imm)) => Ok(gen_ret(rs1, imm).into()),
@@ -768,7 +782,22 @@ fn instr_ret(_pc: Location, parser: &mut Parser) -> InstructionParserResult {
 }
 
 inventory::submit! {
-    Instruction::new("ret", instr_ret)
+    Instruction::new_with_explain(
+        "ret",
+        instr_ret,
+        "Return To Caller",
+        "PC = rs1 + imm",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Return to the address in rs1 offset by imm.")
+                .arg("rs1", ParserTypes::Register)
+                .arg("imm", ParserTypes::Immediate.with_expected_bits(6))
+        ).variant(
+            InstructionMetaExplainVariant::new("Return to the address in rs1.")
+                .arg("rs1", ParserTypes::Register)
+        ).variant(
+            InstructionMetaExplainVariant::new("Return to the address automatically in ra.")
+        )
+    )
 }
 
 /// Generates a `call` instruction from the given distance
@@ -792,7 +821,22 @@ fn instr_call(pc: Location, parser: &mut Parser) -> InstructionParserResult {
 }
 
 inventory::submit! {
-    Instruction::new("call", instr_call)
+    Instruction::new_with_explain(
+        "call",
+        instr_call,
+        "Call Function",
+        "rd = PC + 1; PC += imm",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Call a function, placing the return \
+                destination in rd.")
+                .arg("rd", ParserTypes::Register)
+                .arg("label", ParserTypes::Label)
+        ).variant(
+            InstructionMetaExplainVariant::new("Call a function, placing the return \
+                destination automatically in ra.")
+                .arg("label", ParserTypes::Label)
+        )
+)
 }
 
 /// Generates a `calle` instruction from the given distance
@@ -823,7 +867,22 @@ fn instr_calle(pc: Location, parser: &mut Parser) -> InstructionParserResult {
 }
 
 inventory::submit! {
-    Instruction::new("calle", instr_calle)
+    Instruction::new_with_explain(
+        "calle",
+        instr_calle,
+        "Call Function Extended",
+        "rd = PC + 1; PC += imm",
+        || InstructionMetaExplain::new(
+            InstructionMetaExplainVariant::new("Call a function, placing the return destination in rd. \
+                This instruction is extended to allow for further jump distances.")
+                .arg("rd", ParserTypes::Register)
+                .arg("label", ParserTypes::Label)
+        ).variant(
+            InstructionMetaExplainVariant::new("Call a function, placing the return destination \
+                automatically in ra. This instruction is extended to allow for further jump distances.")
+                .arg("label", ParserTypes::Label)
+        )
+    )
 }
 
 /// Generates a `in` instruction from the given register and immediate
